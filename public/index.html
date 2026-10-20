@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Suivi des congés</title><link rel="stylesheet" href="/theme.css">
+<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+<div class="app-shell" x-data="leaveApp()" x-init="init()">
+<aside class="sidebar">
+  <div class="brand"><span class="brand-mark">↗</span><span>Congés<small>ESPACE PERSONNEL</small></span></div>
+  <nav class="nav">
+    <button :class="{active:page==='dashboard'}" @click="page='dashboard'">▦ Tableau de bord</button>
+    <button :class="{active:page==='monthly'}" @click="page='monthly'">▤ Suivi mensuel</button>
+    <button :class="{active:page==='operations'}" @click="page='operations'">↔ Opérations</button>
+    <button :class="{active:page==='history'}" @click="page='history'">◷ Historique</button>
+    <button :class="{active:page==='settings'}" @click="page='settings'">⚙ Paramètres</button>
+  </nav>
+  <div class="side-note">Suivi clair, décisions sereines.<br><span x-text="'Exercice '+selectedYear"></span><br>● Données sauvegardées en ligne</div>
+</aside>
+<main class="main">
+<header class="topbar"><div><div class="eyebrow">Gestion des absences / <span x-text="pageTitle()"></span></div><h1 x-text="pageTitle()"></h1></div>
+<div class="top-actions"><select class="select" x-model.number="selectedYear" @change="load()"><template x-for="y in yearOptions()" :key="y"><option :value="y" x-text="y"></option></template></select><button class="btn" @click="exportCsv()">↓ Export CSV</button><button class="btn primary" @click="openNew()">＋ Ajouter un congé</button></div></header>
+<div x-show="loading" class="panel empty">Chargement…</div><div x-show="error" class="panel empty" x-text="error"></div>
+<div x-show="!loading&&!error">
+<section x-show="page==='dashboard'">
+<div class="stats">
+<article class="stat"><div class="stat-top">Solde disponible · CP</div><div class="stat-value" x-text="fmt(calc.closingPaid)+' j'"></div><div class="muted">Prévision fin décembre</div></article>
+<article class="stat"><div class="stat-top">Congés payés acquis</div><div class="stat-value" x-text="fmt(calc.earnedTotal)+' j'"></div><div class="muted" x-text="fmt(config.monthly_paid)+' j par mois'"></div></article>
+<article class="stat"><div class="stat-top">Congés payés consommés</div><div class="stat-value" x-text="fmt(calc.paidTakenTotal)+' j'"></div><div class="muted" x-text="fmt(calc.initialPaid)+' j reportés'"></div></article>
+<article class="stat"><div class="stat-top">Solde maladie restant</div><div class="stat-value" x-text="fmt(calc.sickRemaining)+' j'"></div><div class="muted" x-text="fmt(calc.sickTakenTotal)+' j consommés'"></div></article>
+</div>
+<div class="panel"><div class="panel-head"><div><h2>Vue annuelle</h2><p>Évolution du solde de congés payés</p></div><button class="btn" @click="page='monthly'">Voir le suivi →</button></div>
+<div class="chart"><template x-for="m in calc.months" :key="m.month"><div class="bar-wrap"><span x-text="fmt(m.closingPaid)"></span><div class="bar" :style="'height:'+barHeight(m.closingPaid)+'%'"></div><small x-text="m.name.slice(0,3)"></small></div></template></div></div>
+<div class="panel"><div class="panel-head"><div><h2>Dernières opérations</h2><p>Congés récemment saisis</p></div><button class="btn" @click="page='operations'">Tout voir →</button></div>
+<div class="table-wrap"><table><thead><tr><th>Période</th><th>Type</th><th>Jours</th><th>Statut</th><th></th></tr></thead><tbody><template x-for="op in yearOperations().slice(0,6)" :key="op.id"><tr><td x-text="dateRange(op)"></td><td x-text="typeLabel(op.leave_type)"></td><td x-text="fmt(op.days)"></td><td x-text="statusLabel(op.status)"></td><td><button class="btn small" @click="editOperation(op)">Modifier</button></td></tr></template></tbody></table><div class="empty" x-show="!yearOperations().length">Aucune opération enregistrée.</div></div></div>
+</section>
+<section x-show="page==='monthly'">
+<div class="panel"><div class="panel-head"><div><h2>Suivi mensuel · <span x-text="selectedYear"></span></h2><p>Soldes recalculés automatiquement.</p></div><button class="btn" @click="printReport()">Imprimer / PDF</button></div>
+<div class="table-wrap"><table><thead><tr><th>Mois</th><th>Solde initial CP</th><th>Crédit CP</th><th>CP pris</th><th>Solde final CP</th><th>Maladie prise</th><th>Solde maladie</th></tr></thead><tbody><template x-for="m in calc.months" :key="m.month"><tr><td x-text="m.name"></td><td x-text="fmt(m.openingPaid)"></td><td x-text="fmt(m.monthlyCredit)"></td><td x-text="fmt(m.paidTaken)"></td><td class="balance" x-text="fmt(m.closingPaid)"></td><td x-text="fmt(m.sickTaken)"></td><td class="balance" x-text="fmt(m.sickBalance)"></td></tr></template><tr class="summary"><td>Année</td><td x-text="fmt(calc.initialPaid)"></td><td x-text="fmt(calc.earnedTotal)"></td><td x-text="fmt(calc.paidTakenTotal)"></td><td x-text="fmt(calc.closingPaid)"></td><td x-text="fmt(calc.sickTakenTotal)"></td><td x-text="fmt(calc.sickRemaining)"></td></tr></tbody></table></div><p class="footnote">Le crédit maladie annuel est renouvelé selon les paramètres ; il n’est pas ajouté douze fois au compteur.</p></div>
+</section>
+<section x-show="page==='operations'">
+<div class="panel"><div class="panel-head"><div><h2>Opérations de congés</h2><p>Ajouter, modifier ou supprimer une opération.</p></div><div class="filters"><input class="select" placeholder="Rechercher…" x-model="search"><select class="select" x-model="filterType"><option value="">Tous les types</option><option value="paid">Congés payés</option><option value="sick">Congés maladie</option></select><select class="select" x-model="filterStatus"><option value="">Tous les statuts</option><option value="validated">Validé</option><option value="planned">Planifié</option><option value="cancelled">Annulé</option></select></div></div>
+<div class="table-wrap"><table><thead><tr><th>Période</th><th>Type</th><th>Jours</th><th>Statut</th><th>Commentaire</th><th>Actions</th></tr></thead><tbody><template x-for="op in filteredOperations()" :key="op.id"><tr><td x-text="dateRange(op)"></td><td x-text="typeLabel(op.leave_type)"></td><td x-text="fmt(op.days)"></td><td x-text="statusLabel(op.status)"></td><td x-text="op.comment||'—'"></td><td><button class="btn small" @click="editOperation(op)">Modifier</button> <button class="btn small danger" @click="deleteOperation(op)">Supprimer</button></td></tr></template></tbody></table><div class="empty" x-show="!filteredOperations().length">Aucune opération ne correspond aux filtres.</div></div></div>
+</section>
+<section x-show="page==='history'">
+<div class="panel"><div class="panel-head"><div><h2>Journal des modifications</h2><p>Créations, modifications, suppressions et corrections.</p></div><button class="btn" @click="openAdjustment()">＋ Corriger un solde</button></div>
+<div class="table-wrap"><table><thead><tr><th>Date</th><th>Action</th><th>Élément</th><th>Détails</th></tr></thead><tbody><template x-for="a in audit" :key="a.id"><tr><td x-text="formatTimestamp(a.created_at)"></td><td x-text="a.action"></td><td x-text="a.entity"></td><td x-text="auditSummary(a.details)"></td></tr></template></tbody></table><div class="empty" x-show="!audit.length">Aucun historique.</div></div></div>
+<div class="panel"><div class="panel-head"><div><h2>Corrections manuelles</h2><p>Motif conservé dans l’historique.</p></div></div><div class="table-wrap"><table><thead><tr><th>Compteur</th><th>Mois</th><th>Ancienne valeur → nouvelle</th><th>Motif</th><th></th></tr></thead><tbody><template x-for="a in adjustments.filter(a=>Number(a.year)===selectedYear)" :key="a.id"><tr><td x-text="typeLabel(a.leave_type)"></td><td x-text="a.month?monthLabel(Number(a.month)):'Global'"></td><td x-text="fmt(a.old_value)+' → '+fmt(a.new_value)"></td><td x-text="a.reason"></td><td><button class="btn small danger" @click="deleteAdjustment(a)">Supprimer</button></td></tr></template></tbody></table></div></div>
+</section>
+<section x-show="page==='settings'">
+<div class="panel"><div class="panel-head"><div><h2>Paramètres de l’exercice <span x-text="selectedYear"></span></h2><p>Les soldes sont recalculés après enregistrement.</p></div><button class="btn primary" @click="saveSettings()">Enregistrer</button></div>
+<div class="settings-grid">
+<div class="setting"><h3>Congés payés</h3><label>Crédit annuel (jours)<input type="number" step=".01" x-model.number="config.annual_paid"></label><label>Acquisition mensuelle<input type="number" step=".0001" x-model.number="config.monthly_paid"></label><label>Solde initial reporté<input type="number" step=".01" x-model.number="config.initial_paid"></label></div>
+<div class="setting"><h3>Congés maladie</h3><label>Crédit annuel<input type="number" step=".01" x-model.number="config.annual_sick"></label><label>Solde initial<input type="number" step=".01" x-model.number="config.initial_sick"></label><label class="check"><input type="checkbox" x-model="config.sick_carry"> Autoriser le report maladie</label></div>
+<div class="setting"><h3>Règles de calcul</h3><label>Mode de calcul<select x-model="config.day_mode"><option value="ouvrés">Jours ouvrés</option><option value="calendaires">Jours calendaires</option></select></label><label>Mois de début<select x-model.number="config.start_month"><template x-for="m in calc.months" :key="m.month"><option :value="m.month" x-text="m.name"></option></template></select></label><label class="check"><input type="checkbox" x-model="config.planned_forecast"> Inclure les congés planifiés</label></div>
+</div><div class="panel-actions"><button class="btn primary" @click="saveSettings()">Enregistrer les paramètres</button></div></div>
+<div class="panel"><div class="panel-head"><div><h2>Préparer une année</h2><p>Report du solde final des congés payés.</p></div></div><div class="inline-form"><label>Nouvelle année<input type="number" x-model.number="newYear"></label><button class="btn primary" @click="createYear()">Créer l’année</button></div></div>
+</section>
+</div></main>
+<template x-if="modal"><div class="backdrop" @click.self="modal=null"><div class="modal"><div class="panel-head"><h2 x-text="modal==='operation'?(editing?'Modifier un congé':'Ajouter un congé'):'Correction manuelle'"></h2><button class="btn" @click="modal=null">✕</button></div>
+<form @submit.prevent="saveModal()"><div class="modal-content" x-show="modal==='operation'">
+<label>Type<select x-model="form.leave_type"><option value="paid">Congé payé</option><option value="sick">Congé maladie</option></select></label>
+<label>Statut<select x-model="form.status"><option value="validated">Validé / consommé</option><option value="planned">Planifié</option><option value="cancelled">Annulé</option></select></label>
+<label>Date de début<input type="date" required x-model="form.start_date" @change="autoDays()"></label><label>Date de fin<input type="date" required x-model="form.end_date" @change="autoDays()"></label>
+<label>Nombre de jours<input type="number" min=".5" max="366" step=".5" required x-model.number="form.days"></label><button class="btn" type="button" @click="autoDays()">Calculer depuis les dates</button>
+<label class="wide">Commentaire<textarea x-model="form.comment" maxlength="1000"></textarea></label>
+</div><div class="modal-content" x-show="modal==='adjustment'">
+<label>Compteur<select x-model="adjustment.leave_type"><option value="paid">Congés payés</option><option value="sick">Congés maladie</option></select></label>
+<label>Mois<select x-model="adjustment.month"><option value="">Global</option><template x-for="m in calc.months" :key="m.month"><option :value="m.month" x-text="m.name"></option></template></select></label>
+<label>Ancienne valeur<input type="number" step=".01" required x-model.number="adjustment.old_value"></label><label>Nouvelle valeur<input type="number" step=".01" required x-model.number="adjustment.new_value"></label>
+<label>Date<input type="date" required x-model="adjustment.adjustment_date"></label><label>Motif obligatoire<input required x-model="adjustment.reason"></label>
+</div><div class="modal-actions"><button class="btn" type="button" @click="modal=null">Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div></form></div></div></template>
+<div class="toast" x-show="toast" x-text="toast" x-transition></div>
+</div><script src="/app.js"></script>
+</body></html>
